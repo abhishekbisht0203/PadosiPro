@@ -62,14 +62,16 @@ export async function sendOtpEmail({ to, name, code, expiresInMinutes }: OtpEmai
   }
 
   if (config.MAIL_MODE === 'console') {
+    // The `CODE:` marker is deliberate: it makes the line greppable by tooling
+    // (`npm run smoke` and manual curl walks both read it) while staying obvious
+    // to a human reading the server output.
     console.info(
       [
         '',
         '  +---------------------------------------------------+',
-        `  |  PadosiPro verification code for ${to.padEnd(32)}|`,
-        '  |                                                   |',
-        `  |        ${code}   -   valid ${expiresInMinutes} minutes           |`,
-        '  |                                                   |',
+        `  |  PadosiPro verification code                        |`,
+        `  |  to:   ${to.padEnd(43)}|`,
+        `  |  CODE: ${code}   valid ${expiresInMinutes} minutes              |`,
         '  +---------------------------------------------------+',
         '',
       ].join('\n'),

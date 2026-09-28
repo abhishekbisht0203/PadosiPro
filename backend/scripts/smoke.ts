@@ -95,8 +95,8 @@ async function main() {
     check('register returns 201', reg.status === 201, reg.body);
     check('register says verify next', reg.body?.data?.nextStep === 'verify_email');
 
-    const code = /(\d{6})/.exec(serverLog)?.[1];
-    check('verification code was emailed to the console outbox', Boolean(code), 'no code found in mail output');
+    const code = /CODE:\s*(\d{6})/.exec(serverLog)?.[1];
+    check('verification code was emailed to the console outbox', Boolean(code), 'no CODE: marker in mail output');
 
     console.log('\n3. Verify email');
     const wrong = await call('POST', '/api/auth/verify-otp', { email, code: '000000' });
