@@ -15,11 +15,17 @@ export const migrations: Migration[] = [
   {
     id: '0001_init',
     sql: /* sql */ `
-      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+      -- No extensions are required: gen_random_uuid() is in core from
+      -- PostgreSQL 13, and case-insensitive email uniqueness is handled by a
+      -- functional index. Depending on contrib/citext would make the schema
+      -- fail to migrate on a stripped-down Postgres image.
 
       CREATE TABLE IF NOT EXISTS users (
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        email         CITEXT_NOT NULL UNIQUE,
+        -- Normalised to lowercase by the validation layer. The functional index
+        -- below is the actual case-insensitive guarantee, and is also the
+        -- unique constraint that an insert-on-conflict resolves against.
+        email         TEXT NOT NULL,
         password_hash TEXT NOT NULL,
         is_verified   BOOLEAN NOT NULL DEFAULT FALSE,
         verified_at   TIMESTAMPTZ,

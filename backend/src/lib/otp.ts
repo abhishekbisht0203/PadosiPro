@@ -132,7 +132,7 @@ export function resendState(
 
 /**
  * Throws the right `AppError` when a challenge cannot be used any more, and
- * returns silently when it is usable. Separated from `evaluateOtpAttempt` so
+ * returns silently when it is usable. Separated from `evaluateOtpCode` so
  * the state machine can be tested without any hashing.
  */
 export function assertChallengeUsable(challenge: OtpChallenge | null, now: Date = new Date()): asserts challenge is OtpChallenge {
@@ -160,7 +160,7 @@ export function assertChallengeUsable(challenge: OtpChallenge | null, now: Date 
  * machine can be tested without paying bcrypt's cost 20 times; production
  * passes `verifyOtpHash`.
  */
-export async function evaluateOtpAttempt(
+export async function evaluateOtpCode(
   challenge: OtpChallenge | null,
   code: string,
   now: Date = new Date(),

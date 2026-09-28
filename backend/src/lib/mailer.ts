@@ -23,6 +23,27 @@ export interface OtpEmail {
 }
 
 /**
+ * Test-only outbox.
+ *
+ * The plaintext code is deliberately never persisted anywhere the service can
+ * read it back — that is the security property under test. But an integration
+ * test still has to prove the happy path works, and standing in for "the user
+ * opened their inbox" needs *some* channel. So when NODE_ENV=test the mailer
+ * drops the code in memory here and nowhere else. Production code paths never
+ * write to it, and it lives in the same process, so it disappears on restart.
+ */
+const outbox = new Map<string, string>();
+
+export function readOtpOutbox(email: string): string | null {
+  return outbox.get(email.toLowerCase()) ?? null;
+}
+
+export function clearOtpOutbox(): void {
+  outbox.clear();
+}
+
+
+/**
  * Sends the verification code.
  *
  * `MAIL_MODE=console` skips SMTP entirely and prints the code, which keeps the
@@ -34,6 +55,11 @@ export async function sendOtpEmail({ to, name, code, expiresInMinutes }: OtpEmai
   const subject = `${code} is your PadosiPro verification code`;
   const html = renderOtpEmail(code, expiresInMinutes);
   const text = renderOtpEmailText(code, expiresInMinutes);
+
+  if (config.isTest) {
+    outbox.set(to.toLowerCase(), code);
+    return;
+  }
 
   if (config.MAIL_MODE === 'console') {
     console.info(

@@ -38,6 +38,11 @@ const schema = z.object({
 
   CORS_ORIGIN: z.string().default('*'),
   RESET_DB: booleanish,
+
+  // Credential-endpoint rate limits. Configurable so the test suite can raise
+  // them; the limiter behaviour itself is covered by its own test.
+  AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(20),
+  REGISTER_RATE_LIMIT_PER_15MIN: z.coerce.number().int().min(1).default(10),
 });
 
 const parsed = schema.safeParse(process.env);

@@ -1,0 +1,71 @@
+# One command brings up the database, the mail catcher and the API:
+#
+#   docker compose up --build
+#
+# Then: API http://localhost:4000  ·  Mailpit http://localhost:8025
+#
+# No .env file is required — every value below has a development-safe default
+# and the API refuses to boot in production with the example JWT secret.
+
+name: padosipro
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: padosipro
+      POSTGRES_PASSWORD: padosipro
+      POSTGRES_DB: padosipro
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U padosipro -d padosipro']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Catches every email the API sends. Open http://localhost:8025 to read the
+  # verification code. Swap SMTP_HOST for a real provider to send real mail.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: 200
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - '8025:8025' # web UI
+      - '1025:1025' # SMTP
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgres://padosipro:padosipro@postgres:5432/padosipro
+      # Development-only secret. Override in any real environment.
+      JWT_SECRET: dev-only-insecure-secret-change-me-0000000000000000
+      JWT_EXPIRES_IN: 7d
+      MAIL_MODE: smtp
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_SECURE: 'false'
+      MAIL_FROM: 'PadosiPro <no-reply@padosipro.local>'
+      CORS_ORIGIN: '*'
+    ports:
+      - '4000:4000'
+    command: ['node', 'dist/index.js']
+
+volumes:
+  pgdata:

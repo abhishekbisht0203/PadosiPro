@@ -17,7 +17,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint . --ext .ts",
+    "test:embedded": "tsx scripts/test-embedded.ts",
+    "db:pg:embedded": "tsx src/tests/embedded-pg.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -40,6 +43,7 @@
     "@types/nodemailer": "^6.4.17",
     "@types/pg": "^8.11.10",
     "@types/supertest": "^6.0.2",
+    "embedded-postgres": "^18.4.0-beta.17",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

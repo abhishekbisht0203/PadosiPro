@@ -36,7 +36,8 @@ export const badRequest = (code: string, message: string, details?: ErrorDetails
 
 export const unauthorized = (code: string, message: string) => new AppError(401, code, message);
 
-export const forbidden = (code: string, message: string) => new AppError(403, code, message);
+export const forbidden = (code: string, message: string, meta?: Record<string, unknown>) =>
+  new AppError(403, code, message, meta ? { meta } : {});
 
 export const notFound = (code: string, message: string) => new AppError(404, code, message);
 
