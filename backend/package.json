@@ -20,7 +20,9 @@
     "lint": "eslint . --ext .ts",
     "test:embedded": "tsx scripts/test-embedded.ts",
     "db:pg:embedded": "tsx src/tests/embedded-pg.ts",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "dev:stack": "tsx scripts/dev-stack.ts",
+    "db:pg": "tsx src/tests/embedded-pg.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

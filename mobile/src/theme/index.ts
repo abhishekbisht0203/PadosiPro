@@ -1,6 +1,8 @@
 import { Platform, TextStyle } from 'react-native';
 import { colors, radii, spacing, typography } from './tokens';
 
+export * from './tokens';
+
 /**
  * The display face. Eina01 is a licensed asset so it cannot be shipped here;
  * the platform serif sits in a similar place optically and keeps the wordmark

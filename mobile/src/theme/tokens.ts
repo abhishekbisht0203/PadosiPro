@@ -90,6 +90,13 @@ export const typography = {
     fontWeight: '600' as const,
     color: colors.textPrimary,
   },
+  /** Heading for a grouped block, e.g. one category in the selection list. */
+  sectionTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600' as const,
+    color: colors.textPrimary,
+  },
   body: {
     fontSize: 15,
     lineHeight: 23,

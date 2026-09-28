@@ -14,7 +14,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api/client';
 import { toApiError } from '../api/errors';
-import type { TaskCategory } from '../api/types';
+import type { Task, TaskCategory } from '../api/types';
 import { HeroHeader } from '../components/HeroHeader';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { SearchField } from '../components/TextField';
@@ -24,11 +24,17 @@ import { useAuth } from '../context/AuthContext';
 import { ACTION_BAR_HEIGHT, colors, motion, radii, shared, shadows, spacing, typography } from '../theme';
 import { describeError } from '../utils/errors';
 
-interface FlatTask {
-  id: number;
-  name: string;
-  description: string;
+interface FlatTask extends Task {
   categoryId: string;
+}
+
+/** A SectionList section: the category plus its (possibly filtered) tasks. */
+interface TaskSection {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: string;
+  data: FlatTask[];
 }
 
 /**
@@ -86,35 +92,38 @@ export function TaskSelectionScreen() {
   }, []);
 
   /**
-   * Search runs across task name, description and category title. Matches on
-   * any word rather than the whole phrase, so "home ac" finds "AC servicing &
-   * installation" under Home Services.
+   * Search runs across task name, description and category title. Every term
+   * must match, so "home ac" finds "AC servicing & installation" under Home
+   * Services but "home zzz" correctly finds nothing.
    */
-  const filtered = useMemo(() => {
+  const filtered = useMemo<TaskSection[]>(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (terms.length === 0) {
-      return categories
-        .map((c) => ({ ...c, tasks: c.tasks.map((t) => ({ ...t, categoryId: c.id })) }))
-        .filter((c) => c.tasks.length > 0);
-    }
 
     return categories
-      .map((c) => ({
-        ...c,
-        tasks: c.tasks
-          .map((t) => ({ ...t, categoryId: c.id }))
-          .filter((t) => {
-            const haystack = `${t.name} ${t.description} ${c.title} ${c.subtitle}`.toLowerCase();
-            return terms.every((term) => haystack.includes(term));
-          }),
+      .map<TaskSection>((c) => ({
+        id: c.id,
+        title: c.title,
+        subtitle: c.subtitle,
+        icon: c.icon,
+        data: c.tasks.map((t) => ({ ...t, categoryId: c.id })),
       }))
-      .filter((c) => c.tasks.length > 0);
+      .map((section) => ({
+        ...section,
+        data:
+          terms.length === 0
+            ? section.data
+            : section.data.filter((task) => {
+                const haystack = `${task.name} ${task.description} ${section.title} ${section.subtitle}`.toLowerCase();
+                return terms.every((term) => haystack.includes(term));
+              }),
+      }))
+      .filter((section) => section.data.length > 0);
   }, [categories, query]);
 
-  const totalMatching = filtered.reduce((sum, c) => sum + c.tasks.length, 0);
+  const totalMatching = filtered.reduce((sum, section) => sum + section.data.length, 0);
 
   const toggleCategory = useCallback(
-    (categoryId: string, tasks: FlatTask[]) => {
+    (categoryId: string, tasks: readonly FlatTask[]) => {
       const allSelected = tasks.every((t) => selected.has(t.id));
       setSelected((prev) => {
         const next = new Set(prev);
@@ -168,12 +177,10 @@ export function TaskSelectionScreen() {
         <SectionList
           ref={listRef}
           sections={filtered}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={[shared.content, { paddingBottom: insets.bottom + ACTION_BAR_HEIGHT + spacing.xl }]}
+          keyExtractor={(item) => String(item.id)}          contentContainerStyle={[shared.content, { paddingBottom: insets.bottom + ACTION_BAR_HEIGHT + spacing.xl }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           stickySectionHeadersEnabled={false}
-          layout={LinearTransition.duration(motion.base)}
           ListHeaderComponent={
             <View style={styles.header}>
               <SearchField
@@ -190,8 +197,8 @@ export function TaskSelectionScreen() {
             </View>
           }
           renderSectionHeader={({ section }) => {
-            const allSelected = section.tasks.length > 0 && section.tasks.every((t) => selected.has(t.id));
-            const someSelected = section.tasks.some((t) => selected.has(t.id));
+            const allSelected = section.data.length > 0 && section.data.every((t) => selected.has(t.id));
+            const someSelected = section.data.some((t) => selected.has(t.id));
             return (
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionTitleWrap}>
@@ -206,7 +213,7 @@ export function TaskSelectionScreen() {
                   </View>
                 </View>
                 <Pressable
-                  onPress={() => toggleCategory(section.id, section.tasks)}
+                  onPress={() => toggleCategory(section.id, section.data)}
                   hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={`${allSelected ? 'Deselect' : 'Select all'} in ${section.title}`}
