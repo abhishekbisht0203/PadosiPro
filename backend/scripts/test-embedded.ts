@@ -9,7 +9,9 @@ async function main(): Promise<never> {
   const port = process.env.EMBEDDED_PG_PORT ?? '55432';
   const pg = await startEmbeddedPostgres();
 
-  process.env.DATABASE_URL = `postgres://padosipro:padosipro@localhost:${port}/padosipro_test`;
+  // The ephemeral Postgres is local, so the safety guard in tests/setup.ts is
+  // satisfied without any opt-in.
+  process.env.TEST_DATABASE_URL = `postgres://padosipro:padosipro@localhost:${port}/padosipro_test`;
   process.env.NODE_ENV = 'test';
 
   const { spawn } = await import('node:child_process');

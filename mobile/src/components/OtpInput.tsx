@@ -25,6 +25,17 @@ export function OtpInput({ value, onChange, length = 6, error, autoFocus = true 
   const shake = useRef(new Animated.Value(0)).current;
   const [focused, setFocused] = useState(false);
 
+  // Six fixed-width boxes overflow a 320pt phone (and looked wrong on a narrow
+  // viewport), so the row measures itself and the slots flex down to fit.
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const MAX_SLOT = 46;
+  const MIN_SLOT = 34;
+  const gap = spacing.sm;
+  const slotWidth = availableWidth
+    ? Math.max(MIN_SLOT, Math.min(MAX_SLOT, Math.floor((availableWidth - gap * (length - 1)) / length)))
+    : MAX_SLOT;
+  const slotHeight = Math.round(slotWidth * 1.26);
+
   useEffect(() => {
     if (error) {
       Animated.sequence([
@@ -65,7 +76,10 @@ export function OtpInput({ value, onChange, length = 6, error, autoFocus = true 
 
   return (
     <View>
-      <Animated.View style={[styles.row, { transform: [{ translateX }, { translateY }] }]}>
+      <Animated.View
+        onLayout={(e) => setAvailableWidth(e.nativeEvent.layout.width)}
+        style={[styles.row, { transform: [{ translateX }, { translateY }] }]}
+      >
         {Array.from({ length }, (_, index) => {
           const digit = value[index] ?? '';
           const isActive = focused && index === value.length;
@@ -79,16 +93,17 @@ export function OtpInput({ value, onChange, length = 6, error, autoFocus = true 
                 accessibilityLabel={`Digit ${index + 1} of ${length}`}
                 style={[
                   styles.slot,
+                  { width: slotWidth, height: slotHeight },
                   isFilled && styles.slotFilled,
                   isActive && styles.slotActive,
                   Boolean(error) && styles.slotError,
                 ]}
               >
-                <Text style={[styles.digit, Boolean(error) && styles.digitError]}>{digit}</Text>
+                <Text style={[styles.digit, { fontSize: Math.round(slotWidth * 0.52) }]}>{digit}</Text>
               </Pressable>
 
               {/* The caret only shows on the box that would receive the next tap. */}
-              {isActive ? <Animated.View style={styles.caret} /> : null}
+              {isActive ? <Animated.View style={[styles.caret, { bottom: Math.round(slotHeight * 0.24), height: Math.round(slotHeight * 0.38) }]} /> : null}
             </Animated.View>
           );
         })}
@@ -124,8 +139,6 @@ const styles = StyleSheet.create({
   },
   slotWrap: { alignItems: 'center', justifyContent: 'center' },
   slot: {
-    width: 46,
-    height: 58,
     borderRadius: radii.md,
     borderWidth: 1.5,
     borderColor: colors.borderStrong,
@@ -138,17 +151,12 @@ const styles = StyleSheet.create({
   slotError: { borderColor: colors.error, backgroundColor: colors.errorSoft },
   digit: {
     fontFamily: monoFont,
-    fontSize: 24,
-    lineHeight: 30,
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  digitError: { color: colors.error },
   caret: {
     position: 'absolute',
-    bottom: 14,
     width: 2,
-    height: 22,
     borderRadius: 1,
     backgroundColor: colors.primary,
     opacity: 0.85,

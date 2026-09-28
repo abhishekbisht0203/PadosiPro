@@ -22,7 +22,8 @@
     "db:pg:embedded": "tsx src/tests/embedded-pg.ts",
     "smoke": "tsx scripts/smoke.ts",
     "dev:stack": "tsx scripts/dev-stack.ts",
-    "db:pg": "tsx src/tests/embedded-pg.ts"
+    "db:pg": "tsx src/tests/embedded-pg.ts",
+    "db:check": "tsx scripts/check-db.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -45,7 +46,7 @@
     "@types/nodemailer": "^6.4.17",
     "@types/pg": "^8.11.10",
     "@types/supertest": "^6.0.2",
-    "embedded-postgres": "^18.4.0-beta.17",
+    "embedded-postgres": "^17.5.0-beta.15",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

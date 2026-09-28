@@ -18,9 +18,30 @@ import type {
  * set EXPO_PUBLIC_API_URL before running the app. See README "Pointing the app
  * at your backend".
  */
+function normaliseBaseUrl(raw: string): string {
+  // Whitespace and trailing slashes in an environment variable are the classic
+  // cause of "it works in curl but not in the app". Silently trimming here turns
+  // a confusing runtime network error into a config that just works.
+  const cleaned = raw.trim().replace(/\/+$/, '');
+  if (!cleaned) return cleaned;
+
+  // Fail loudly and specifically rather than producing `http://host /api/...`,
+  // which surfaces to the user as a misleading "cannot reach the server".
+  try {
+    // eslint-disable-next-line no-new
+    new URL(cleaned);
+  } catch {
+    throw new Error(
+      `EXPO_PUBLIC_API_URL is not a valid URL: "${raw}". ` +
+        'Set it to something like "http://192.168.1.20:4000" (no trailing spaces or slash).',
+    );
+  }
+  return cleaned;
+}
+
 function resolveBaseUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  if (fromEnv && fromEnv.trim()) return normaliseBaseUrl(fromEnv);
 
   if (Platform.OS === 'android') return 'http://10.0.2.2:4000';
 
@@ -28,7 +49,7 @@ function resolveBaseUrl(): string {
   // host is the machine running Metro.
   if (Constants.expoConfig?.hostUri) {
     const host = Constants.expoConfig.hostUri.split(':')[0];
-    if (host) return `http://${host}:4000`;
+    if (host) return `http://${host.trim()}:4000`;
   }
   return 'http://localhost:4000';
 }

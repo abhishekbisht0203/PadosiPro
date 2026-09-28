@@ -8,6 +8,22 @@ import { profileRouter } from './modules/profile/routes.js';
 import { tasksRouter } from './modules/tasks/routes.js';
 import { CATALOGUE } from './db/catalogue.js';
 
+/**
+ * `Access-Control-Allow-Origin: *` combined with
+ * `Access-Control-Allow-Credentials: true` is an invalid combination that
+ * browsers reject outright, which makes every request fail as a network error
+ * even though the API is healthy. So when the app is in "any origin" mode we
+ * reflect the caller's origin instead of sending a literal `*`, and only enable
+ * credentials when the origin is explicitly allow-listed.
+ */
+export function buildCorsOptions() {
+  const allowAnyOrigin = config.corsOrigins === '*';
+  return {
+    origin: allowAnyOrigin ? true : config.corsOrigins,
+    credentials: !allowAnyOrigin,
+  };
+}
+
 export function createApp(): Express {
   const app = express();
 
@@ -19,7 +35,7 @@ export function createApp(): Express {
       contentSecurityPolicy: false,
     }),
   );
-  app.use(cors({ origin: config.corsOrigins, credentials: true }));
+  app.use(cors(buildCorsOptions()));
   app.use(express.json({ limit: '100kb' }));
 
   // Cheap liveness probe used by the Dockerfile healthcheck and docker compose.
