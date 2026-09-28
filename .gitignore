@@ -44,3 +44,7 @@ coverage/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Tooling scratch output
+.playwright-mcp/
+.expo-export-*/
