@@ -28,7 +28,17 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-build-properties"
-    ]
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "comment": "usesCleartextTraffic is required because the API is reached over plain HTTP on a LAN address during development (http://10.0.2.2:4000 on the emulator, or http://<LAN-IP>:4000 on a device). Android 9+ blocks cleartext by default, so a release build refused every request with a bare 'Network request failed'. Point EXPO_PUBLIC_API_URL at an https:// endpoint and this can be turned off."
+    }
   }
 }
