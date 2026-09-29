@@ -10,8 +10,13 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "prebuild:android": "expo prebuild --platform android --clean",
-    "build:apk": "expo prebuild --platform android && cd android && ./gradlew assembleRelease",
-    "build:aab": "expo prebuild --platform android && cd android && ./gradlew bundleRelease"
+    "prebuild:android:quick": "expo prebuild --platform android",
+    "gradle:apk": "cd android && gradlew.bat assembleRelease",
+    "gradle:aab": "cd android && gradlew.bat bundleRelease",
+    "build:apk": "expo prebuild --platform android --clean && cd android && gradlew.bat assembleRelease",
+    "build:aab": "expo prebuild --platform android --clean && cd android && gradlew.bat bundleRelease",
+    "build:apk:quick": "expo prebuild --platform android && cd android && gradlew.bat assembleRelease",
+    "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
