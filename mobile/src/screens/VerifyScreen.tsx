@@ -24,9 +24,14 @@ const EXPIRY_SECONDS = 10 * 60;
  * The countdown mirrors the server policy (30s between sends, 10 minute expiry)
  * but the server is still the authority — if the two ever disagree the server's
  * error is what the user sees, and the countdown simply re-syncs from it.
+ *
+ * The back arrow returns to the sign-in screen. It used to call
+ * `setPendingEmail`, which *also* routed to the verify stage — a back button
+ * that went nowhere. A mistyped address is a real and common mistake here, and
+ * without a way out the only escape was restarting the app.
  */
 export function VerifyScreen() {
-  const { email, completeVerification, setPendingEmail } = useAuth();
+  const { email, completeVerification, cancelPendingEmail } = useAuth();
   const insets = useSafeAreaInsets();
 
   const [code, setCode] = useState('');
@@ -133,7 +138,7 @@ export function VerifyScreen() {
         eyebrow="Verify your email"
         title="Enter the code we sent"
         subtitle={email ? `We sent a 6-digit code to ${email}.` : 'Enter the 6-digit code we sent to your email.'}
-        onBack={() => setPendingEmail(email ?? '')}
+        onBack={cancelPendingEmail}
         compact
       />
 

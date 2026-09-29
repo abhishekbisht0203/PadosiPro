@@ -17,7 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test:embedded": "tsx scripts/test-embedded.ts",
     "db:pg:embedded": "tsx src/tests/embedded-pg.ts",
     "smoke": "tsx scripts/smoke.ts",
@@ -38,6 +39,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
@@ -47,9 +49,12 @@
     "@types/pg": "^8.11.10",
     "@types/supertest": "^6.0.2",
     "embedded-postgres": "^17.5.0-beta.15",
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.71.0",
     "vitest": "^2.1.8"
   }
 }

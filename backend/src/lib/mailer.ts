@@ -1,17 +1,66 @@
-/* eslint-disable no-console */
 import nodemailer, { type Transporter } from 'nodemailer';
 import { config } from '../env.js';
 
+/**
+ * Transactional email.
+ *
+ * Production delivery is **Brevo SMTP** (`smtp-relay.brevo.com:587`). Two other
+ * modes exist and neither is a silent fallback — the mode is explicit, and the
+ * config for the chosen mode is checked at boot, so a misconfigured deployment
+ * fails immediately rather than accepting signups it cannot email.
+ *
+ *   brevo   -> Brevo's SMTP relay. The assignment's real path.
+ *   smtp    -> the generic SMTP_* block. Local Mailpit, or any other relay.
+ *   console -> print the code, open no socket. Local development only.
+ *
+ * Credentials are read from the environment and never logged. The Brevo password
+ * is a Brevo *SMTP key* (Brevo > Account > SMTP & API > SMTP keys); the account
+ * password and the API key do not work here.
+ */
+
 let cached: Transporter | null = null;
 
-function transporter(): Transporter {
-  if (cached) return cached;
-  cached = nodemailer.createTransport({
+/** Where the sender identity comes from, whichever way it was configured. */
+function fromAddress(): string {
+  if (config.MAIL_FROM) return config.MAIL_FROM;
+  const name = config.MAIL_FROM_NAME?.trim() || 'PadosiPro';
+  const email = config.MAIL_FROM_EMAIL ?? '';
+  return email ? `${name} <${email}>` : name;
+}
+
+function transportOptions() {
+  if (config.MAIL_MODE === 'brevo') {
+    // Port 587 is STARTTLS: the socket starts plaintext and is upgraded. Setting
+    // `secure` for 587 would make nodemailer dial implicit TLS on the wrong port
+    // and Brevo would drop the connection. Implicit TLS is 465.
+    const secure = config.BREVO_SMTP_PORT === 465;
+    return {
+      host: config.BREVO_SMTP_HOST,
+      port: config.BREVO_SMTP_PORT,
+      secure,
+      requireTLS: !secure,
+      auth: { user: config.BREVO_SMTP_USER ?? '', pass: config.BREVO_SMTP_PASSWORD ?? '' },
+      // Fail fast rather than hanging a signup behind a black-holed socket.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
+    } as const;
+  }
+
+  return {
     host: config.SMTP_HOST,
     port: config.SMTP_PORT,
     secure: config.SMTP_SECURE,
     ...(config.SMTP_USER ? { auth: { user: config.SMTP_USER, pass: config.SMTP_PASSWORD } } : {}),
-  });
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  } as const;
+}
+
+function transporter(): Transporter {
+  if (cached) return cached;
+  cached = nodemailer.createTransport(transportOptions());
   return cached;
 }
 
@@ -31,6 +80,9 @@ export interface OtpEmail {
  * opened their inbox" needs *some* channel. So when NODE_ENV=test the mailer
  * drops the code in memory here and nowhere else. Production code paths never
  * write to it, and it lives in the same process, so it disappears on restart.
+ *
+ * It is also how a seeded *real* delivery test can assert the SMTP hand-off
+ * without scraping the message out of a mailbox.
  */
 const outbox = new Map<string, string>();
 
@@ -42,19 +94,22 @@ export function clearOtpOutbox(): void {
   outbox.clear();
 }
 
+/** Test seam: lets a suite assert what would have been handed to the transport. */
+export function resetTransporterForTests(): void {
+  cached = null;
+}
 
 /**
- * Sends the verification code.
+ * Sends the verification code over the configured transport.
  *
- * `MAIL_MODE=console` skips SMTP entirely and prints the code, which keeps the
- * README's "15 minute quickstart" honest on a machine without Mailpit.
- * `MAIL_MODE=smtp` talks to whatever `SMTP_HOST` points at — Mailpit locally,
- * SES / SendGrid / Gmail in production. See README "Email delivery".
+ * Throws on failure. The caller (`auth/service.ts`) treats a throw as "the code
+ * was never delivered" and rolls the challenge back, so a 502 from Brevo leaves
+ * the user able to retry rather than staring at a code that will never arrive.
  */
 export async function sendOtpEmail({ to, name, code, expiresInMinutes }: OtpEmail): Promise<void> {
   const subject = `${code} is your PadosiPro verification code`;
   const html = renderOtpEmail(code, expiresInMinutes);
-  const text = renderOtpEmailText(code, expiresInMinutes);
+  const text = renderOtpEmailText(name, code, expiresInMinutes);
 
   if (config.isTest) {
     outbox.set(to.toLowerCase(), code);
@@ -69,7 +124,7 @@ export async function sendOtpEmail({ to, name, code, expiresInMinutes }: OtpEmai
       [
         '',
         '  +---------------------------------------------------+',
-        `  |  PadosiPro verification code                        |`,
+        '  |  PadosiPro verification code                        |',
         `  |  to:   ${to.padEnd(43)}|`,
         `  |  CODE: ${code}   valid ${expiresInMinutes} minutes              |`,
         '  +---------------------------------------------------+',
@@ -79,12 +134,26 @@ export async function sendOtpEmail({ to, name, code, expiresInMinutes }: OtpEmai
     return;
   }
 
-  await transporter().sendMail({ from: config.MAIL_FROM, to, subject, text, html });
+  try {
+    await transporter().sendMail({ from: fromAddress(), to, subject, text, html });
+  } catch (err) {
+    // Log the transport and the code class, never the key and never the OTP.
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[mail] SMTP delivery failed via ${config.MAIL_MODE} to ${to}: ${reason}`,
+    );
+    throw err;
+  }
 }
 
-function renderOtpEmailText(code: string, expiresInMinutes: number): string {
+function greeting(name: string | null): string {
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `Hi ${first},` : 'Hi,';
+}
+
+function renderOtpEmailText(name: string | null, code: string, expiresInMinutes: number): string {
   return [
-    `Hi${''},`,
+    greeting(name),
     '',
     `Your PadosiPro verification code is ${code}`,
     '',

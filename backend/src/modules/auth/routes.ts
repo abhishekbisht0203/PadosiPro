@@ -37,14 +37,10 @@ export const authRouter: Router = Router();
 authRouter.post('/register', registerLimiter, async (req, res, next) => {
   try {
     const { email, password } = parseBody(registerBodySchema, req.body);
+    // An already-verified address is a conflict thrown from the service, which
+    // the shared error handler turns into the standard 409 envelope. The service
+    // never returns an 'already-verified' outcome.
     const result = await authService.register(email, password);
-
-    if (result.outcome === 'already-verified') {
-      res.status(409).json({
-        error: { code: 'EMAIL_ALREADY_REGISTERED', message: 'That email is already registered. Sign in instead.' },
-      });
-      return;
-    }
 
     res.status(201).json({
       data: {

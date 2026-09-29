@@ -47,6 +47,15 @@ export const conflict = (code: string, message: string, meta?: Record<string, un
 export const tooManyRequests = (code: string, message: string, meta?: Record<string, unknown>) =>
   new AppError(429, code, message, meta ? { meta } : {});
 
+/**
+ * An upstream dependency we called failed — in practice the SMTP relay.
+ *
+ * 502 rather than 500: the API is fine, Brevo is not, and the distinction tells
+ * the client this is worth retrying rather than reporting a broken app.
+ */
+export const badGateway = (code: string, message: string, meta?: Record<string, unknown>) =>
+  new AppError(502, code, message, meta ? { meta } : {});
+
 export const internal = (message = 'Something went wrong. Please try again.') =>
   new AppError(500, 'INTERNAL_ERROR', message);
 

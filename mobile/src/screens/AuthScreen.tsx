@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -34,7 +34,7 @@ type Mode = 'login' | 'register';
  * password is the most annoying thing an app can ask for.
  */
 export function AuthScreen() {
-  const { login, setPendingEmail } = useAuth();
+  const { login, setPendingEmail, initialLoadError, retryInitialLoad } = useAuth();
   const insets = useSafeAreaInsets();
 
   const [mode, setMode] = useState<Mode>('login');
@@ -45,6 +45,9 @@ export function AuthScreen() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+
+  const isRegister = mode === 'register';
 
   // Editing a field clears its error, so a stale "required" never lingers after
   // the user has started typing.
@@ -67,12 +70,14 @@ export function AuthScreen() {
 
     if (isRegister) {
       const passwordError = validators.password(password);
-      if (passwordError) {
-        rules.password = passwordError;
-      } else if (!confirmPassword) {
-        rules.password = 'Confirm your password';
-      } else if (confirmPassword !== password) {
-        rules.password = 'Passwords do not match';
+      if (passwordError) rules.password = passwordError;
+
+      // The mismatch error belongs on the *confirm* field, not the password
+      // field. It used to be written to `rules.password`, so the message showed
+      // under both inputs at once and the user could not tell which box to fix.
+      if (!passwordError) {
+        const confirmError = validators.confirmPassword(confirmPassword, password);
+        if (confirmError) rules.confirmPassword = confirmError;
       }
     } else if (!password) {
       rules.password = 'Password is required';
@@ -87,7 +92,7 @@ export function AuthScreen() {
     setSubmitting(true);
 
     try {
-      if (mode === 'register') {
+      if (isRegister) {
         await api.register(email.trim().toLowerCase(), password);
         // The account exists but is not verified yet, so the next stop is
         // always the OTP screen — never the home screen.
@@ -98,11 +103,23 @@ export function AuthScreen() {
     } catch (err) {
       const apiErr = toApiError(err);
 
-      // An unverified account is a routing decision, not a dead end: send them
-      // to the OTP screen instead of showing a failure they cannot act on.
       if (apiErr.code === 'EMAIL_NOT_VERIFIED') {
-        setPendingEmail(apiErr.message ? email.trim().toLowerCase() : email.trim().toLowerCase());
+        // An unverified account is a routing decision, not a dead end: send them
+        // to the OTP screen instead of showing a failure they cannot act on.
+        setPendingEmail(email.trim().toLowerCase());
         setFormError(null);
+      } else if (apiErr.code === 'OTP_RESEND_TOO_SOON') {
+        // Registering twice inside the cooldown means a code is already out
+        // there. Route to the OTP screen — that is where the user can use it —
+        // rather than leaving them on a form with an error they cannot clear.
+        setPendingEmail(email.trim().toLowerCase());
+        setFormError(
+          apiErr.retryAfterSeconds
+            ? `A code was already sent. You can request another in ${apiErr.retryAfterSeconds}s.`
+            : 'A code was already sent a moment ago.',
+        );
+      } else if (apiErr.code === 'EMAIL_ALREADY_REGISTERED') {
+        setFormError('That email is already registered. Sign in instead.');
       } else {
         setFormError(describeError(err));
         setErrors(mergeFieldErrors(err, {}));
@@ -112,7 +129,16 @@ export function AuthScreen() {
     }
   };
 
-  const isRegister = mode === 'register';
+  const handleRetry = useCallback(async () => {
+    setRetrying(true);
+    try {
+      await retryInitialLoad();
+    } catch {
+      // loadSession records its own error state; nothing to add here.
+    } finally {
+      setRetrying(false);
+    }
+  }, [retryInitialLoad]);
 
   return (
     <KeyboardAvoidingView
@@ -149,7 +175,37 @@ export function AuthScreen() {
             </Text>
           </StaggeredList>
 
-          {formError ? (
+          {initialLoadError ? (
+          <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
+            <View style={styles.bootstrapBanner}>
+              <Feather name="wifi-off" size={15} color={colors.error} />
+              <View style={styles.bootstrapCopy}>
+                <Text style={styles.bootstrapTitle}>Could not check your session</Text>
+                <Text style={styles.bootstrapMessage}>{initialLoadError}</Text>
+              </View>
+              <Pressable
+                onPress={handleRetry}
+                disabled={retrying}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Retry checking your session"
+                testID="auth-retry-bootstrap"
+              >
+                <View style={styles.retryPill}>
+                  <Feather
+                    name="refresh-cw"
+                    size={13}
+                    color={colors.primary}
+                    style={retrying ? styles.spinning : undefined}
+                  />
+                  <Text style={styles.retryText}>{retrying ? 'Retrying' : 'Retry'}</Text>
+                </View>
+              </Pressable>
+            </View>
+          </Animated.View>
+        ) : null}
+
+        {formError ? (
             <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
               <InlineBanner tone="error" message={formError} onDismiss={() => setFormError(null)} />
             </Animated.View>
@@ -192,11 +248,12 @@ export function AuthScreen() {
                   value={confirmPassword}
                   onChangeText={(v) => {
                     setConfirmPassword(v);
-                    clearFieldError('password');
+                    clearFieldError('confirmPassword');
                   }}
-                  error={errors.password}
+                  error={errors.confirmPassword}
                   returnKeyType="go"
                   onSubmitEditing={handleSubmit}
+                  testID="auth-confirm-password"
                 />
               </Animated.View>
             ) : null}
@@ -276,4 +333,30 @@ const styles = StyleSheet.create({
   assurance: { marginTop: spacing.xl, gap: spacing.sm, alignItems: 'center' },
   assuranceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   assuranceText: { ...typography.bodySmall, fontSize: 12 },
+
+  bootstrapBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.errorSoft,
+    borderWidth: 1,
+    borderColor: colors.error,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.base,
+  },
+  bootstrapCopy: { flex: 1, gap: 2 },
+  bootstrapTitle: { ...typography.bodySmall, fontWeight: '700', color: colors.error },
+  bootstrapMessage: { ...typography.bodySmall, color: colors.textSecondary },
+  retryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.mintSoft,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+  },
+  retryText: { ...typography.bodySmall, fontSize: 12, fontWeight: '700', color: colors.primary },
+  spinning: { transform: [{ rotate: '90deg' }] },
 });

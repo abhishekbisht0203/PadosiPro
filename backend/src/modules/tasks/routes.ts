@@ -29,12 +29,16 @@ const TASK_COLUMNS = `
  * The catalogue, grouped by category and ordered the same way the app renders
  * it. Returns `selected` per task so the selection screen renders from a single
  * request instead of two.
+ *
+ * Response fields are camelCase to match every other endpoint; the database
+ * columns they come from are snake_case. `/selected` used to leak the raw
+ * `category_id`, which the app silently ignored.
  */
 interface CatalogueTask {
   id: number;
   slug: string;
   name: string;
-  category_id: string;
+  categoryId: string;
   subcategory: string;
   description: string;
   icon: string;
@@ -72,7 +76,7 @@ tasksRouter.get('/', async (req, res, next) => {
         id: row.id,
         slug: row.slug,
         name: row.name,
-        category_id: row.category_id,
+        categoryId: row.category_id,
         subcategory: row.subcategory,
         description: row.description,
         icon: row.icon,
@@ -175,6 +179,9 @@ tasksRouter.put('/selected', async (req, res, next) => {
           subcategory: row.subcategory,
           description: row.description,
           icon: row.icon,
+          // Same shape as GET /selected so the client can treat the two
+          // responses interchangeably.
+          selectedAt: row.selected_at.toISOString(),
         })),
         totalSelected: rows.length,
       },

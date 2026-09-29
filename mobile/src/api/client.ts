@@ -5,6 +5,7 @@ import type {
   MeResponse,
   Profile,
   RegisterResponse,
+  ResendResponse,
   SessionResponse,
   TaskCategory,
   TaskSelectionResponse,
@@ -129,7 +130,7 @@ export const api = {
     request<SessionResponse>('/api/auth/verify-otp', { method: 'POST', body: { email, code } }),
 
   resendOtp: (email: string) =>
-    request<{ email: string }>('/api/auth/resend-otp', { method: 'POST', body: { email } }),
+    request<ResendResponse>('/api/auth/resend-otp', { method: 'POST', body: { email } }),
 
   login: (email: string, password: string) =>
     request<SessionResponse>('/api/auth/login', { method: 'POST', body: { email, password } }),

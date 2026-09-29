@@ -16,6 +16,15 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  /**
+   * TLS to Postgres. Left unset it is inferred from the URL (a managed host or
+   * an `sslmode=` in the query string turns it on); set it explicitly to
+   * override. See `db/pool.ts`.
+   */
+  DATABASE_SSL: z.enum(['true', 'false', 'auto']).default('auto'),
+
+  /** Points the test suite at a different database than the running app. */
+  TEST_DATABASE_URL: z.string().optional(),
 
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
@@ -28,13 +37,46 @@ const schema = z.object({
   OTP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
   OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(0).default(30),
 
-  MAIL_MODE: z.enum(['smtp', 'console']).default('smtp'),
+  /**
+   * Transactional email.
+   *
+   * `brevo` is the production path: the OTP email is delivered over Brevo's
+   * SMTP relay. `console` prints the code to stdout and skips the network, which
+   * keeps a local quickstart honest on a machine with no SMTP account. `smtp`
+   * points at the generic SMTP_* block and is what a local Mailpit container
+   * uses. Anything else is rejected at boot rather than silently falling back.
+   */
+  MAIL_MODE: z.enum(['brevo', 'smtp', 'console']).default('brevo'),
+
+  /**
+   * Brevo SMTP. The password is a *Brevo SMTP key*, not the account password and
+   * not the API key. Never committed — see backend/.env.example.
+   */
+  BREVO_SMTP_HOST: z.string().default('smtp-relay.brevo.com'),
+  BREVO_SMTP_PORT: z.coerce.number().int().positive().default(587),
+  BREVO_SMTP_USER: z.string().optional(),
+  BREVO_SMTP_PASSWORD: z.string().optional(),
+
+  /**
+   * Generic SMTP escape hatch, used by MAIL_MODE=smtp/mailpit. Kept separate
+   * from the Brevo block so a local Mailpit config can never be mistaken for
+   * production credentials.
+   */
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
   SMTP_SECURE: booleanish,
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  MAIL_FROM: z.string().default('PadosiPro <no-reply@padosipro.local>'),
+
+  /** Sender identity. Must be a sender verified in the Brevo account. */
+  MAIL_FROM_EMAIL: z.string().email('MAIL_FROM_EMAIL must be a valid email address').optional(),
+  MAIL_FROM_NAME: z.string().default('PadosiPro'),
+  /**
+   * Combined RFC 5322 From header, used when it is set. Takes precedence over
+   * MAIL_FROM_EMAIL/NAME so an existing deployment can migrate without edits.
+   */
+  MAIL_FROM: z.string().optional(),
+
 
   CORS_ORIGIN: z.string().default('*'),
   RESET_DB: booleanish,
@@ -59,6 +101,33 @@ const env = parsed.data;
 if (env.NODE_ENV === 'production' && env.JWT_SECRET.startsWith('dev-only')) {
   console.error('[config] Refusing to start in production with the example JWT_SECRET.');
   process.exit(1);
+}
+
+/**
+ * Mail configuration has to be coherent before the server accepts a signup, not
+ * discovered when the first user waits ten minutes for a code that was never
+ * sent. These are cheap checks and they turn a silent failure into a boot error.
+ */
+if (env.MAIL_MODE === 'brevo') {
+  const missing: string[] = [];
+  if (!env.BREVO_SMTP_USER) missing.push('BREVO_SMTP_USER');
+  if (!env.BREVO_SMTP_PASSWORD) missing.push('BREVO_SMTP_PASSWORD');
+  if (!env.MAIL_FROM_EMAIL && !env.MAIL_FROM) missing.push('MAIL_FROM_EMAIL');
+
+  if (missing.length > 0 && env.NODE_ENV !== 'test') {
+    console.error(
+      [
+        '',
+        '[config] MAIL_MODE=brevo but the Brevo SMTP configuration is incomplete:',
+        ...missing.map((name) => `  - ${name}`),
+        '',
+        'Set them in backend/.env (see .env.example), or switch MAIL_MODE to',
+        '"console" for local development without a mail provider.',
+        '',
+      ].join('\n'),
+    );
+    process.exit(1);
+  }
 }
 
 export const config = {

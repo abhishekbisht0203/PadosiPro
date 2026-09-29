@@ -47,7 +47,7 @@ interface TaskSection {
  * stuck on a second screen with a stale list.
  */
 export function TaskSelectionScreen() {
-  const { token, setSelectedTaskCount } = useAuth();
+  const { token, setSelectedTaskCount, editingSelection, cancelEditSelection } = useAuth();
   const insets = useSafeAreaInsets();
 
   const [categories, setCategories] = useState<TaskCategory[]>([]);
@@ -61,6 +61,15 @@ export function TaskSelectionScreen() {
 
   const listRef = useRef<SectionList<FlatTask>>(null);
 
+  /**
+   * The selection the user started this visit with.
+   *
+   * In edit mode nothing is written until `confirm`, so this is what "Cancel"
+   * restores — and what the screen compares against to tell the user whether
+   * they have actually changed anything.
+   */
+  const initialSelection = useRef<Set<number>>(new Set());
+
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -69,7 +78,15 @@ export function TaskSelectionScreen() {
     try {
       const { categories: loaded } = await api.tasks(token);
       setCategories(loaded);
-      setSelected(new Set(loaded.flatMap((c) => c.tasks.filter((t) => t.selected).map((t) => t.id))));
+      // The catalogue carries a `selected` flag per task, so the current
+      // selection is restored from the server rather than held in memory.
+      // That is what makes "edit" safe: the picker opens showing what is
+      // actually saved.
+      const serverSelection = new Set(
+        loaded.flatMap((c) => c.tasks.filter((t) => t.selected).map((t) => t.id)),
+      );
+      initialSelection.current = new Set(serverSelection);
+      setSelected(serverSelection);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -122,6 +139,14 @@ export function TaskSelectionScreen() {
 
   const totalMatching = filtered.reduce((sum, section) => sum + section.data.length, 0);
 
+  const hasChanges = useMemo(() => {
+    if (selected.size !== initialSelection.current.size) return true;
+    for (const id of selected) {
+      if (!initialSelection.current.has(id)) return true;
+    }
+    return false;
+  }, [selected]);
+
   const toggleCategory = useCallback(
     (categoryId: string, tasks: readonly FlatTask[]) => {
       const allSelected = tasks.every((t) => selected.has(t.id));
@@ -154,14 +179,29 @@ export function TaskSelectionScreen() {
     } finally {
       setSaving(false);
     }
-  }, [selected, selected.size, setSelectedTaskCount, token]);
+  }, [selected, setSelectedTaskCount, token]);
+
+  /**
+   * Leave without saving. Available in edit mode only — on the first-run picker
+   * there is nothing to go back to, and the sticky confirm button is the only
+   * way forward by design.
+   */
+  const cancel = useCallback(() => {
+    setSelected(new Set(initialSelection.current));
+    cancelEditSelection();
+  }, [cancelEditSelection]);
 
   return (
     <View style={shared.screen}>
       <HeroHeader
-        eyebrow="Step 2 of 2"
-        title="What should we handle?"
-        subtitle="Pick everything you would rather not think about. You can change this any time."
+        eyebrow={editingSelection ? 'Edit your selection' : 'Step 2 of 2'}
+        title={editingSelection ? 'Change what we handle' : 'What should we handle?'}
+        subtitle={
+          editingSelection
+            ? 'Your current tasks stay saved until you tap Save changes.'
+            : 'Pick everything you would rather not think about. You can change this any time.'
+        }
+        onBack={editingSelection ? cancel : undefined}
         compact
       />
 
@@ -260,6 +300,9 @@ export function TaskSelectionScreen() {
           saving={saving}
           error={saveError}
           bottomInset={insets.bottom}
+          editing={editingSelection}
+          hasChanges={hasChanges}
+          onCancel={cancel}
           onConfirm={confirm}
         />
       ) : null}
@@ -273,12 +316,18 @@ function SelectionBar({
   saving,
   error,
   bottomInset,
+  editing,
+  hasChanges,
+  onCancel,
   onConfirm,
 }: {
   count: number;
   saving: boolean;
   error: string | null;
   bottomInset: number;
+  editing: boolean;
+  hasChanges: boolean;
+  onCancel: () => void;
   onConfirm: () => void;
 }) {
   const bar = useSharedValue(0);
@@ -322,18 +371,32 @@ function SelectionBar({
       ) : null}
 
       <View style={styles.barInner}>
-        <View style={styles.countWrap}>
-          <Text style={styles.count}>{count}</Text>
-          <Text style={styles.countLabel}>{count === 1 ? 'task selected' : 'tasks selected'}</Text>
-        </View>
+        {editing ? (
+          <Pressable
+            onPress={onCancel}
+            disabled={saving}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel editing your task selection"
+            testID="cancel-edit-selection"
+            style={styles.cancelButton}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.countWrap}>
+            <Text style={styles.count}>{count}</Text>
+            <Text style={styles.countLabel}>{count === 1 ? 'task selected' : 'tasks selected'}</Text>
+          </View>
+        )}
 
         <Animated.View style={[{ flex: 1 }, buttonStyle]}>
           <PrimaryButton
-            label="Confirm selection"
+            label={editing ? (hasChanges ? 'Save changes' : 'Saved') : 'Confirm selection'}
             onPress={onConfirm}
             loading={saving}
-            disabled={count === 0}
-            icon="arrow-right"
+            disabled={count === 0 || (editing && !hasChanges)}
+            icon={editing ? 'check' : 'arrow-right'}
             testID="confirm-selection"
           />
         </Animated.View>
@@ -400,6 +463,15 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   barInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.base },
+  cancelButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  cancelText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
   countWrap: { minWidth: 74 },
   count: { fontSize: 24, lineHeight: 28, fontWeight: '700', color: colors.primary },
   countLabel: { ...typography.bodySmall, fontSize: 11 },

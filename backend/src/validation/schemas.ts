@@ -15,10 +15,17 @@ export const emailSchema = z
   .toLowerCase()
   .email('Enter a valid email address');
 
+/**
+ * bcrypt hashes at most 72 *bytes* of input and silently discards the rest, so
+ * the limit is measured in UTF-8 bytes rather than characters. A 30-character
+ * Hindi or emoji password passes a naive `.max(72)` on length and then gets
+ * truncated at the byte level, which would make two different passwords verify
+ * against the same hash. See `lib/password.ts`.
+ */
 export const passwordSchema = z
   .string()
   .min(8, 'Use at least 8 characters')
-  .max(72, 'Use at most 72 characters')
+  .refine((v) => Buffer.byteLength(v, 'utf8') <= 72, 'Use at most 72 bytes (shorter if using non-English characters)')
   .refine((v) => /[a-z]/.test(v), 'Include at least one lowercase letter')
   .refine((v) => /[A-Z]/.test(v), 'Include at least one uppercase letter')
   .refine((v) => /[0-9]/.test(v), 'Include at least one number');
@@ -35,7 +42,9 @@ export const registerBodySchema = z.object({
 
 export const loginBodySchema = z.object({
   email: emailSchema,
-  password: z.string().min(1, 'Password is required').max(72, 'That password is too long'),
+  // Login must not reject a stored password that was accepted before the byte
+  // limit existed, so it only bounds the length generously.
+  password: z.string().min(1, 'Password is required').max(1024, 'That password is too long'),
 });
 
 export const verifyOtpBodySchema = z.object({

@@ -38,10 +38,17 @@ export async function startEmbeddedPostgres(): Promise<{ stop: () => Promise<voi
 const isDirectRun = process.argv[1]?.replace(/\\/g, '/').endsWith('embedded-pg.ts');
 
 if (isDirectRun) {
-  startEmbeddedPostgres().then(async (instance) => {
-    console.info(`[embedded-pg] running on localhost:${PORT}/padosipro_test — press Ctrl+C to stop`);
-    process.on('SIGINT', () => {
-      void instance.stop().finally(() => process.exit(0));
+  // Intentionally not awaited: this keeps the process alive for the embedded
+  // server, and the `void` marks the floating promise as deliberate.
+  void startEmbeddedPostgres()
+    .then(async (instance) => {
+      console.info(`[embedded-pg] running on localhost:${PORT}/padosipro_test — press Ctrl+C to stop`);
+      process.on('SIGINT', () => {
+        void instance.stop().finally(() => process.exit(0));
+      });
+    })
+    .catch((err) => {
+      console.error('[embedded-pg] failed to start:', err);
+      process.exit(1);
     });
-  });
 }

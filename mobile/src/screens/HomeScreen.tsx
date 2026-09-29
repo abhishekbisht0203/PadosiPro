@@ -31,7 +31,7 @@ function greeting(): string {
  * what makes a list of a hundred tasks scannable.
  */
 export function HomeScreen() {
-  const { token, profile, email, logout, setSelectedTaskCount } = useAuth();
+  const { token, profile, email, logout, beginEditSelection, reportSelectedTaskCount } = useAuth();
   const insets = useSafeAreaInsets();
 
   const [tasks, setTasks] = useState<SelectedTask[]>([]);
@@ -48,7 +48,10 @@ export function HomeScreen() {
       try {
         const { tasks: loaded, totalSelected } = await api.selectedTasks(token);
         setTasks(loaded);
-        setSelectedTaskCount(totalSelected);
+        // Report, do not route. Driving the stage from here made the empty
+        // state below unreachable: fetching 0 switched the stage to `tasks` and
+        // unmounted Home before "No tasks selected yet" could render.
+        reportSelectedTaskCount(totalSelected);
       } catch (err) {
         setError(describeError(err));
       } finally {
@@ -56,7 +59,7 @@ export function HomeScreen() {
         setRefreshing(false);
       }
     },
-    [setSelectedTaskCount, token],
+    [reportSelectedTaskCount, token],
   );
 
   useEffect(() => {
@@ -82,20 +85,21 @@ export function HomeScreen() {
     ]);
   }, [logout]);
 
+  /**
+   * Enter the picker without touching the saved selection.
+   *
+   * This used to call `PUT /api/tasks/selected` with an empty array and then
+   * let the resulting count of 0 route the user to the picker. That genuinely
+   * deleted every saved task the moment they tapped "edit" — so backing out,
+   * losing connection, or having the app killed meant the selection was gone.
+   * Now nothing is written until the user explicitly confirms.
+   */
   const editSelection = useCallback(async () => {
-    if (!token) return;
-    try {
-      // Clearing the selection is what routes the user back to the picker: the
-      // navigator treats "no tasks" as "still choosing".
-      const { totalSelected } = await api.saveSelectedTasks(token, []);
-      if (Platform.OS !== 'web') {
-        void Haptics.selectionAsync();
-      }
-      setSelectedTaskCount(totalSelected);
-    } catch (err) {
-      setError(describeError(err));
+    if (Platform.OS !== 'web') {
+      void Haptics.selectionAsync();
     }
-  }, [setSelectedTaskCount, token]);
+    beginEditSelection();
+  }, [beginEditSelection]);
 
   const firstName = (profile?.name ?? '').split(' ')[0] || 'there';
   const initials = (profile?.name ?? 'PP')
@@ -210,7 +214,7 @@ export function HomeScreen() {
             title="No tasks selected yet"
             message="Pick the tasks you would like handled and they will show up here."
             actionLabel="Choose tasks"
-            onAction={() => void editSelection()}
+            onAction={editSelection}
           />
         ) : (
           Object.entries(grouped).map(([categoryTitle, categoryTasks]) => (

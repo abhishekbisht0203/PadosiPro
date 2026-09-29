@@ -27,7 +27,6 @@ export interface Task {
   icon: string;
   selected?: boolean;
 }
-
 export interface TaskCategory {
   id: string;
   title: string;
@@ -58,6 +57,12 @@ export interface RegisterResponse {
   isNewAccount: boolean;
   codeResent: boolean;
   nextStep: 'verify_email';
+}
+
+export interface ResendResponse {
+  email: string;
+  cooldownEnforced: boolean;
+  retryAfterSeconds: number;
 }
 
 export interface TaskSelectionResponse {
