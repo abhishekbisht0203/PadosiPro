@@ -17,8 +17,12 @@ async function main() {
   try {
     const version = await client.query<{ version: string }>('SELECT version()');
     console.info(`[db] connected: ${version.rows[0]?.version.split(',')[0]}`);
-    const ssl = await client.query<{ ssl: string }>("SELECT COALESCE((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off') AS ssl");
-    console.info(`[db] TLS: ${ssl.rows[0]?.ssl}`);
+    const ssl = await client.query<{ ssl: boolean; version: string | null }>(
+      'SELECT COALESCE((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false) AS ssl, (SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS version',
+    );
+    const server = ssl.rows[0]?.ssl ? `on (${ssl.rows[0]?.version})` : 'off';
+    const clientTls = (client as unknown as { connection?: { stream?: { encrypted?: boolean } } }).connection?.stream?.encrypted;
+    console.info(`[db] TLS: client socket ${clientTls ? 'encrypted' : 'plaintext'}, server side ${server}`);
   } finally {
     client.release();
   }
